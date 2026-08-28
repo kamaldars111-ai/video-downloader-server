@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const axios = require('axios');
 
 const app = express();
 app.use(cors());
@@ -12,41 +13,39 @@ app.post('/api/download', async (req, res) => {
         return res.status(400).json({ error: 'يرجى تقديم رابط صحيح' });
     }
 
+    const cleanUrl = videoUrl.trim();
+
+    // المصدر الأول: TikWM (لتيك توك)
     try {
-        // 1. التجميع والتنظيف للرابط
-        const cleanUrl = videoUrl.trim();
-
-        // 2. تجربة الاستخراج عبر خادم TikWM (ممتاز جداً لـ TikTok وبعض المنصات)
-        const tikwmRes = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(cleanUrl)}`);
-        const tikwmData = await tikwmRes.json();
-
-        if (tikwmData.code === 0 && tikwmData.data) {
+        const response = await axios.get(`https://www.tikwm.com/api/?url=${encodeURIComponent(cleanUrl)}`, { timeout: 10000 });
+        if (response.data && response.data.code === 0 && response.data.data) {
             return res.json({
-                downloadUrl: tikwmData.data.play || tikwmData.data.wmplay,
-                title: tikwmData.data.title || 'فيديو بدون عنوان',
-                thumbnail: tikwmData.data.cover || ''
+                downloadUrl: response.data.data.play || response.data.data.wmplay,
+                title: response.data.data.title || 'فيديو بدون عنوان',
+                thumbnail: response.data.data.cover || ''
             });
         }
+    } catch (e) {
+        console.log("TikWM Failed, trying secondary source...");
+    }
 
-        // 3. المحرك البديل الشامل للمناصات الأخرى (YouTube, Instagram, Facebook)
-        const fallbackRes = await fetch(`https://api.tiklydown.eu.org/api/download?url=${encodeURIComponent(cleanUrl)}`);
-        const fallbackData = await fallbackRes.json();
-
-        if (fallbackData && (fallbackData.video || fallbackData.url)) {
-            const finalLink = fallbackData.video?.noWatermark || fallbackData.video?.watermark || fallbackData.url;
+    // المصدر الثاني الاحتياطي: Tiklydown
+    try {
+        const response = await axios.get(`https://api.tiklydown.eu.org/api/download?url=${encodeURIComponent(cleanUrl)}`, { timeout: 10000 });
+        if (response.data && (response.data.video || response.data.url)) {
+            const finalLink = response.data.video?.noWatermark || response.data.video?.watermark || response.data.url;
             return res.json({
                 downloadUrl: finalLink,
-                title: fallbackData.title || 'فيديو جاهز للتحميل',
-                thumbnail: fallbackData.cover || fallbackData.thumbnail || ''
+                title: response.data.title || 'فيديو جاهز للتحميل',
+                thumbnail: response.data.cover || response.data.thumbnail || ''
             });
         }
-
-        return res.status(400).json({ error: 'تعذر استخراج رابط التنزيل. تأكد من صحة الرابط أو جرب رابطاً آخر.' });
-
-    } catch (error) {
-        console.error('Server Internal Error:', error);
-        return res.status(500).json({ error: 'حدث خطأ في معالجة الطلب على السيرفر.' });
+    } catch (e) {
+        console.log("Secondary source failed.");
     }
+
+    // إذا فشلت المصادر
+    return res.status(400).json({ error: 'تعذر استخراج الفيديو. التأكد من أن حساب الفيديو عام وليس خاصاً.' });
 });
 
 const PORT = process.env.PORT || 3000;
