@@ -13,40 +13,39 @@ app.post('/api/download', async (req, res) => {
     }
 
     try {
-        // الاتصال بمحرك التنزيل السريع لتجاوز حظر IPs
-        const cobaltResponse = await fetch('https://api.cobalt.tools/api/json', {
-            method: 'POST',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-            },
-            body: JSON.stringify({
-                url: videoUrl,
-                videoQuality: 'max'
-            })
-        });
+        // 1. التجميع والتنظيف للرابط
+        const cleanUrl = videoUrl.trim();
 
-        const data = await cobaltResponse.json();
-        console.log("Cobalt Response:", data);
+        // 2. تجربة الاستخراج عبر خادم TikWM (ممتاز جداً لـ TikTok وبعض المنصات)
+        const tikwmRes = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(cleanUrl)}`);
+        const tikwmData = await tikwmRes.json();
 
-        if (data.status === 'stream' || data.status === 'redirect' || data.status === 'picker') {
-            const finalUrl = data.url || (data.picker && data.picker[0] ? data.picker[0].url : null);
-
-            if (finalUrl) {
-                return res.json({
-                    downloadUrl: finalUrl,
-                    title: 'فيديو جاهز للتحميل',
-                    thumbnail: data.picker && data.picker[0] ? data.picker[0].thumb : ''
-                });
-            }
+        if (tikwmData.code === 0 && tikwmData.data) {
+            return res.json({
+                downloadUrl: tikwmData.data.play || tikwmData.data.wmplay,
+                title: tikwmData.data.title || 'فيديو بدون عنوان',
+                thumbnail: tikwmData.data.cover || ''
+            });
         }
 
-        return res.status(400).json({ error: 'تعذر استخراج الفيديو. تأكد من أن الرابط عام وليس لحساب خاص.' });
+        // 3. المحرك البديل الشامل للمناصات الأخرى (YouTube, Instagram, Facebook)
+        const fallbackRes = await fetch(`https://api.tiklydown.eu.org/api/download?url=${encodeURIComponent(cleanUrl)}`);
+        const fallbackData = await fallbackRes.json();
+
+        if (fallbackData && (fallbackData.video || fallbackData.url)) {
+            const finalLink = fallbackData.video?.noWatermark || fallbackData.video?.watermark || fallbackData.url;
+            return res.json({
+                downloadUrl: finalLink,
+                title: fallbackData.title || 'فيديو جاهز للتحميل',
+                thumbnail: fallbackData.cover || fallbackData.thumbnail || ''
+            });
+        }
+
+        return res.status(400).json({ error: 'تعذر استخراج رابط التنزيل. تأكد من صحة الرابط أو جرب رابطاً آخر.' });
 
     } catch (error) {
-        console.error('Server Fetch Error:', error);
-        return res.status(500).json({ error: 'حدث خطأ في الاتصال بسيرفر التنزيل.' });
+        console.error('Server Internal Error:', error);
+        return res.status(500).json({ error: 'حدث خطأ في معالجة الطلب على السيرفر.' });
     }
 });
 
