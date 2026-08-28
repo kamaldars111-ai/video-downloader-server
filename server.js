@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const ytdl = require('@distube/ytdl-core');
 
 const app = express();
 app.use(cors());
@@ -14,32 +13,40 @@ app.post('/api/download', async (req, res) => {
     }
 
     try {
-        // التحقق من صحة الرابط
-        if (!ytdl.validateURL(videoUrl)) {
-            return res.status(400).json({ error: 'الرابط غير مدعوم أو غير صحيح' });
-        }
-
-        // جلب معلومات الفيديو
-        const info = await ytdl.getInfo(videoUrl);
-        
-        // اختيار أفضل صيغة تحتوي على صوت وفيديو معا
-        const format = ytdl.chooseFormat(info.formats, { quality: 'highestvideo', filter: 'audioandvideo' }) 
-                    || info.formats.find(f => f.hasVideo && f.hasAudio)
-                    || info.formats[0];
-
-        if (!format || !format.url) {
-            return res.status(404).json({ error: 'لم يتم العثور على رابط مباشر لهذا الفيديو' });
-        }
-
-        return res.json({
-            downloadUrl: format.url,
-            title: info.videoDetails.title || 'فيديو بدون عنوان',
-            thumbnail: info.videoDetails.thumbnails.pop()?.url || ''
+        // الاتصال بمحرك التنزيل السريع لتجاوز حظر IPs
+        const cobaltResponse = await fetch('https://api.cobalt.tools/api/json', {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+            },
+            body: JSON.stringify({
+                url: videoUrl,
+                videoQuality: 'max'
+            })
         });
 
+        const data = await cobaltResponse.json();
+        console.log("Cobalt Response:", data);
+
+        if (data.status === 'stream' || data.status === 'redirect' || data.status === 'picker') {
+            const finalUrl = data.url || (data.picker && data.picker[0] ? data.picker[0].url : null);
+
+            if (finalUrl) {
+                return res.json({
+                    downloadUrl: finalUrl,
+                    title: 'فيديو جاهز للتحميل',
+                    thumbnail: data.picker && data.picker[0] ? data.picker[0].thumb : ''
+                });
+            }
+        }
+
+        return res.status(400).json({ error: 'تعذر استخراج الفيديو. تأكد من أن الرابط عام وليس لحساب خاص.' });
+
     } catch (error) {
-        console.error('Error processing request:', error);
-        return res.status(500).json({ error: 'تعذر جلب الفيديو، قد يكون محمي أو خاص' });
+        console.error('Server Fetch Error:', error);
+        return res.status(500).json({ error: 'حدث خطأ في الاتصال بسيرفر التنزيل.' });
     }
 });
 
