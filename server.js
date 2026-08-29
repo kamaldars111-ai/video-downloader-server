@@ -3,10 +3,25 @@ const cors = require('cors');
 const axios = require('axios');
 
 const app = express();
-app.use(cors());
+
+// إعدادات CORS المتقدمة للسماح لجميع المدونات والمواقع بالاتصال بالسيرفر
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+// معالجة طلبات Preflight المباشرة من المتصفح
+app.options('*', cors());
+
 app.use(express.json());
 
 app.post('/api/download', async (req, res) => {
+    // إضافة ترويسات الأمان يدوياً لضمان عدم الحظر
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
     const { videoUrl } = req.body;
 
     if (!videoUrl) {
@@ -75,5 +90,4 @@ app.post('/api/download', async (req, res) => {
     return res.status(400).json({ error: 'تعذر جلب الفيديو، تأكد من صحة الرابط.' });
 });
 
-// تصدير التطبيق ليعمل مع Vercel Serverless
 module.exports = app;
