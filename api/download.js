@@ -1,8 +1,8 @@
 const axios = require('axios');
 
 module.exports = async (req, res) => {
-    // إعداد ترويسات CORS الشاملة
-    res.setHeader('Access-Control-Allow-Credentials', true);
+    // ترويسات CORS المباشرة والقاطعة
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
     res.setHeader(
@@ -10,7 +10,6 @@ module.exports = async (req, res) => {
         'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
     );
 
-    // الاستجابة الفورية لطلبات المتصفح المبدئية (OPTIONS Preflight)
     if (req.method === 'OPTIONS') {
         return res.status(200).end();
     }
@@ -20,7 +19,6 @@ module.exports = async (req, res) => {
     }
 
     try {
-        // قراءة البيانات بنجاح سواء كانت JSON أو String
         const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
         const videoUrl = body ? body.videoUrl : null;
 
@@ -44,7 +42,7 @@ module.exports = async (req, res) => {
             console.log("TikWM bypassed...");
         }
 
-        // 2. محرك احتياطي Tiklydown (جميع المنصات)
+        // 2. محرك احتياطي Tiklydown
         try {
             const response = await axios.get(`https://api.tiklydown.eu.org/api/download?url=${encodeURIComponent(cleanUrl)}`, { timeout: 8000 });
             if (response.data && (response.data.video || response.data.url)) {
