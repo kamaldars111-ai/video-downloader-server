@@ -1,34 +1,40 @@
 const axios = require('axios');
 
 module.exports = async (req, res) => {
-    // ترويسات CORS المباشرة والقاطعة
+    // 1. إرسال ترويسات CORS المباشرة والقاطعة للمتصفح (Access-Control-Allow-Origin)
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS, POST');
     res.setHeader(
         'Access-Control-Allow-Headers',
         'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
     );
 
+    // 2. الاستجابة الفورية لطلب Preflight المبدئي من المتصفح (OPTIONS)
     if (req.method === 'OPTIONS') {
         return res.status(200).end();
     }
 
+    // 3. السماح فقط بطلبات POST
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method Not Allowed' });
     }
 
     try {
-        const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-        const videoUrl = body ? body.videoUrl : null;
+        // قراءة رابط الفيديو من الجسم (Body) سواء كان JSON أو Text
+        let videoUrl = null;
+        if (req.body) {
+            const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+            videoUrl = body.videoUrl || body.url;
+        }
 
         if (!videoUrl) {
             return res.status(400).json({ error: 'يرجى تقديم رابط صحيح' });
         }
 
-        const cleanUrl = videoUrl.trim();
+        const cleanUrl = String(videoUrl).trim();
 
-        // 1. محرك TikWM (TikTok)
+        // المحرك الأول: TikWM (مخصص ومضمون لـ TikTok)
         try {
             const response = await axios.get(`https://www.tikwm.com/api/?url=${encodeURIComponent(cleanUrl)}`, { timeout: 8000 });
             if (response.data && response.data.code === 0 && response.data.data) {
@@ -42,7 +48,7 @@ module.exports = async (req, res) => {
             console.log("TikWM bypassed...");
         }
 
-        // 2. محرك احتياطي Tiklydown
+        // المحرك الثاني: Tiklydown (يوتيوب، إنستغرام، تيك توك)
         try {
             const response = await axios.get(`https://api.tiklydown.eu.org/api/download?url=${encodeURIComponent(cleanUrl)}`, { timeout: 8000 });
             if (response.data && (response.data.video || response.data.url)) {
@@ -57,9 +63,10 @@ module.exports = async (req, res) => {
             console.log("Tiklydown bypassed...");
         }
 
-        return res.status(400).json({ error: 'تعذر جلب الفيديو، تأكد من صحة الرابط.' });
+        return res.status(400).json({ error: 'تعذر جلب الفيديو، تأكد من أن الرابط عام وصحيح.' });
 
     } catch (err) {
-        return res.status(500).json({ error: 'حدث خطأ في معالجة الطلب داخل السيرفر.' });
+        console.error("Server Error:", err);
+        return res.status(500).json({ error: 'حدث خطأ داخلي أثناء معالجة الطلب.' });
     }
 };
